@@ -51,11 +51,15 @@ public class FPS : MonoBehaviour
         m_velocity = (m_moveHorizontal + m_movVertical).normalized * speed;
 
         //mouse movement 
-        m_yRot = Input.GetAxisRaw("Mouse X");
-        m_rotation = new Vector3(0, m_yRot, 0) * m_lookSensitivity;
+        if (m_cursorIsLocked == true)
+        {
+            m_yRot = Input.GetAxisRaw("Mouse X");
+            m_rotation = new Vector3(0, m_yRot, 0) * m_lookSensitivity;
 
-        m_xRot = Input.GetAxisRaw("Mouse Y");
-        m_cameraRotation = new Vector3(m_xRot, 0, 0) * m_lookSensitivity;
+            m_xRot = Input.GetAxisRaw("Mouse Y");
+            m_cameraRotation = new Vector3(m_xRot, 0, 0) * m_lookSensitivity;
+        }
+
 
         //apply camera rotation
 
