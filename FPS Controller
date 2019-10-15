@@ -42,8 +42,8 @@ public class FPS : MonoBehaviour
     public void Update()
     {
 
-        m_MovX = Input.GetAxis("Horizontal");
-        m_MovY = Input.GetAxis("Vertical");
+        m_MovX = Input.GetAxisRaw("Horizontal");
+        m_MovY = Input.GetAxisRaw("Vertical");
 
         m_moveHorizontal = transform.right * m_MovX;
         m_movVertical = transform.forward * m_MovY;
