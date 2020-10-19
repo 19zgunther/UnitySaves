@@ -1,0 +1,331 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class FPSController : MonoBehaviour
+{
+
+    //for moving the player
+    private bool enableAirMovementControls = true;
+    private Vector3 movementVector;
+    private float jumpPower = 9;
+    private float runningMultiplier = 1.5f;
+    private float velForwards = 2.5f;
+    private float velSideways = 1.75f;
+    private float velBackwards = 1.5f;
+    private bool isJumping = false;
+
+    //General gameobjects
+    [Header("Internal GameObjects")]
+    public Text healthText;
+    public Image healthPanel;
+    public GameObject spawnPoint;
+    private Camera cam;
+
+    //for controlling the crosshairs;
+    public GameObject crosshairs;
+    public GameObject redCrosshairs;
+    private bool crossHairsOut = true;
+    private float lastCrosshairOutTime;
+    private float crossHairResetDelay = 0.1f;
+    private float crossHairScaleChange = 0.5f;
+
+    //for general 1 second interval updates
+    float OneSecondTimer;
+
+
+    //projectile prefabs
+    [Header("Projectile Prefabs")]
+    public GameObject pencilPrefab;
+    public GameObject tearPrefab;
+    public GameObject linePrefab;
+
+    //particle system prefabs;
+    [Header("Projectile Impact Prefabs")]
+    public GameObject smallExplosionPrefab;
+    public GameObject mediumExplosionPrefab;
+    public GameObject largeExplosionPrefab;
+    public GameObject smallProjectileHitPrefab;
+    public GameObject mediumProjectileHitPrefab;
+    public GameObject largeProjectileHitPrefab;
+    private GameObject currentProjectileHitPrefab;
+
+
+    //health, damage, and firing
+    [Header("Health")]
+    public int health = 100;
+    public int phealth = 0;
+    private int currentDamage = 0;
+    private int projectileForce = 0;
+    private string currentProjectile = "none";
+    private bool fullyAutomaticFire = false; 
+    private float timeBetweenFire = 0.3f;
+    private float timeOfLastFire = 0f;
+
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        OneSecondTimer = Time.time;
+        cam = GetComponentInChildren<Camera>();
+        
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+
+        if(OneSecondTimer+1<Time.time)
+        {
+            OneSecondTimer = Time.time;
+            TimerTick();
+        }
+
+        ResetCrossHairs();
+        MovePlayer();
+        MouseRotatePlayer();
+        LockUnlockMouse();
+        Shooting();
+        UpdateHealth();
+        SelectProjectile();
+        
+        
+    }
+
+    void MouseRotatePlayer()
+    {
+        //Rotating entire player about the Y Axis, and only tilting the camera up and down
+        transform.Rotate(new Vector3(0, Input.GetAxis("Mouse X"), 0));
+
+        //rotating camera
+        float cameraAngleChange = Input.GetAxis("Mouse Y");
+        if (!(cam.transform.eulerAngles.x > 60 && cam.transform.eulerAngles.x < 100 && cameraAngleChange < 0)
+            && !(cam.transform.eulerAngles.x < 290 && cam.transform.eulerAngles.x > 230 && cameraAngleChange > 0))
+        {
+            cam.transform.Rotate(new Vector3(-cameraAngleChange, 0, 0));
+            //rotating the player's physical head
+            /*
+            if (!(headObject.transform.eulerAngles.x > 25 && headObject.transform.eulerAngles.x < 100 && cameraAngleChange < 0))
+            {
+                headObject.transform.Rotate(new Vector3(-cameraAngleChange / 2, 0, 0));
+            }
+            */
+        }
+    }
+    void MovePlayer()
+    {
+        //movementVector = GetComponent<Rigidbody>().velocity;
+        //movementVector = movementVector / 10;
+        //detect if the player has landed/stopped jumping :-D
+        if (isJumping && GetComponent<Rigidbody>().velocity.y > -0.01f && GetComponent<Rigidbody>().velocity.y < 0.01f)
+        {
+            isJumping = false;
+        }
+        //Clearing movement Vector UNLESS in the air without airControl Enabled
+        if (!isJumping || enableAirMovementControls)
+        {
+            movementVector.Set(GetComponent<Rigidbody>().velocity.x/2f, GetComponent<Rigidbody>().velocity.y, GetComponent<Rigidbody>().velocity.z/2f);
+        }
+        else
+        {
+            return;
+        }
+
+        if (isJumping)
+        {
+            movementVector += new Vector3(0, -0.25f, 0);
+        }
+
+
+
+        //WASD Controls
+        if (Input.GetKey(KeyCode.W))
+        {
+            if (Input.GetKey(KeyCode.LeftShift))
+            {
+                movementVector += runningMultiplier * velForwards * (new Vector3(Mathf.Sin(Mathf.PI * transform.rotation.eulerAngles.y / 180), 0, Mathf.Cos(Mathf.PI * transform.rotation.eulerAngles.y / 180)));
+            }
+            else
+            {
+                movementVector += velForwards * (new Vector3(Mathf.Sin(Mathf.PI * transform.rotation.eulerAngles.y / 180), 0, Mathf.Cos(Mathf.PI * transform.rotation.eulerAngles.y / 180)));
+            }
+            //isMoving = true;
+        }
+        if (Input.GetKey(KeyCode.S))
+        {
+            movementVector += velSideways * (new Vector3(-Mathf.Sin(Mathf.PI * transform.rotation.eulerAngles.y / 180), 0, -Mathf.Cos(Mathf.PI * transform.rotation.eulerAngles.y / 180)));
+            //isMoving = true;
+        }
+        if (Input.GetKey(KeyCode.D))
+        {
+            movementVector += velSideways * (new Vector3(Mathf.Sin(Mathf.PI * (transform.rotation.eulerAngles.y + 90) / 180), 0, Mathf.Cos(Mathf.PI * (transform.rotation.eulerAngles.y + 90) / 180)));
+            //isMoving = true;
+        }
+        if (Input.GetKey(KeyCode.A))
+        {
+            movementVector += velBackwards * (new Vector3(Mathf.Sin(Mathf.PI * (transform.rotation.eulerAngles.y - 90) / 180), 0, Mathf.Cos(Mathf.PI * (transform.rotation.eulerAngles.y - 90) / 180)));
+            //isMoving = true;
+        }
+
+        //JUMP
+        if (Input.GetKeyDown(KeyCode.Space) && isJumping == false)
+        {
+            isJumping = true;
+            movementVector += new Vector3(0, jumpPower, 0);
+        }
+
+        //Applying Motion only if .x and .z components have changed or are non-zero
+        GetComponent<Rigidbody>().velocity = movementVector;
+
+    }
+    void LockUnlockMouse()
+    {
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+        if (Cursor.lockState == CursorLockMode.None && Input.GetMouseButtonDown(0) && !Input.GetKey(KeyCode.LeftShift))
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+    }
+    void Shooting()
+    {
+        //LEFT CLICK Fire
+        if (Cursor.lockState == CursorLockMode.Locked && 
+            currentDamage != 0 &&
+            ((fullyAutomaticFire && Input.GetMouseButton(0) && timeOfLastFire + timeBetweenFire < Time.time) || 
+            (!fullyAutomaticFire && Input.GetMouseButtonDown(0) && timeOfLastFire+timeBetweenFire/2<Time.time)))
+        {
+            timeOfLastFire = Time.time;
+            
+            /*
+            //Spawning Physical Object
+            GameObject projectile;
+            if (currentProjectile == "tear")
+            {
+                projectile = Instantiate(tearPrefab, spawnPoint.transform.position, cam.transform.rotation);
+                projectile.GetComponent<Rigidbody>().AddForce(cam.transform.forward * 50);
+            } else if (currentProjectile == "firstAmmendment")
+            {
+                projectile = Instantiate(linePrefab, spawnPoint.transform.position, cam.transform.rotation);
+                projectile.GetComponent<Rigidbody>().AddForce(cam.transform.forward * 35);
+            }
+            else if (currentProjectile == "pencil")
+            {
+                projectile = projectile = Instantiate(pencilPrefab, spawnPoint.transform.position, cam.transform.rotation);
+                projectile.transform.Rotate(new Vector3(90, 0, 0));
+                projectile.GetComponent<Rigidbody>().AddForce(cam.transform.forward * 20);
+            }*/
+
+
+            //moving crosshairs out
+            crosshairs.transform.localScale = new Vector3(1 + crossHairScaleChange, 1 + crossHairScaleChange, 1);
+            crossHairsOut = true;
+            lastCrosshairOutTime = Time.time;
+
+
+            //Raycasting, applying force, and dealing damage
+            RaycastHit hit;
+            Ray ray = cam.GetComponent<Camera>().ScreenPointToRay(Input.mousePosition);
+            if (Physics.Raycast(ray, out hit))
+            {
+                try
+                {
+                    //if it has a rigid body, apply force
+                    if (hit.transform.GetComponent<Rigidbody>())
+                    {
+                        hit.transform.GetComponent<Rigidbody>().AddForce(ray.direction * projectileForce); //applying force
+                    }
+
+                    if (hit.transform.gameObject.layer == 8) //if we hit an "Enemy"
+                    {
+
+                        redCrosshairs.transform.localScale = new Vector3(1, 1, 1);
+
+                        //find the parent of the gameobject, the one which has the Enemy script on it
+                        GameObject obj = hit.transform.gameObject;
+                        while (!obj.GetComponent<EnemyController>())
+                        {
+                            obj = obj.transform.parent.gameObject;
+                        }
+                        obj.GetComponent<EnemyController>().health -= currentDamage;  //applying damage
+                    }
+
+                    //now, spawn projectileImpactPrefab;
+                    Instantiate(currentProjectileHitPrefab, hit.point+hit.normal/100, Quaternion.FromToRotation(Vector3.up, hit.normal));
+
+                } catch { Debug.Log("Catch In LeftClick Shoot"); }
+            }
+
+        }
+    }
+    void ResetCrossHairs()
+    {
+        if (crossHairsOut)
+        {
+            if (Time.time > lastCrosshairOutTime + crossHairResetDelay)
+            {
+                //moving back to 1x scale
+                crosshairs.transform.localScale = new Vector3(1, 1, 1);
+                crossHairsOut = false;
+                redCrosshairs.transform.localScale = new Vector3(0, 0, 0);
+            }
+            else if (Time.time > lastCrosshairOutTime + crossHairResetDelay / 2)
+            {
+                //moving half way back to 1x scale
+                crosshairs.transform.localScale = new Vector3(1 + crossHairScaleChange / 2, 1 + crossHairScaleChange / 2, 1);
+                //redCrosshairs.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+            }
+        }
+    }
+    void UpdateHealth()
+    {
+        if(health != phealth)
+        {
+            phealth = health;
+            healthText.text = "Health: " + health.ToString();
+            healthPanel.color = new Color(1, 0, 0);
+            //healthPanel.color = new Color(1-((float)health / 100), (float)health / 100, 0);
+        }
+    }
+    void TimerTick()
+    {
+        if (health < 100)
+        {
+            health += 1;
+        }
+    }
+    void SelectProjectile()
+    {
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+        {
+            currentProjectile = "pencil";
+            currentDamage = 5;
+            projectileForce = 200;
+            currentProjectileHitPrefab = smallProjectileHitPrefab;
+            //currentProjectileHitPrefab = smallExplosionPrefab;
+        }
+        if (Input.GetKeyDown(KeyCode.Alpha2))
+        {
+            currentProjectile = "tear";
+            currentDamage = 10;
+            projectileForce = 600;
+            currentProjectileHitPrefab = mediumProjectileHitPrefab;
+            //currentProjectileHitPrefab = mediumExplosionPrefab;
+        }
+        if (Input.GetKeyDown(KeyCode.Alpha3))
+        {
+            currentProjectile = "firstAmmendment";
+            currentDamage = 20;
+            projectileForce = 2000;
+            currentProjectileHitPrefab = largeProjectileHitPrefab;
+            //currentProjectileHitPrefab = largeExplosionPrefab;
+        } 
+    }
+}
